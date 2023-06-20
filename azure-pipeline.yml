@@ -1,0 +1,64 @@
+trigger:
+- main
+
+
+pool: Azure Pipelines
+
+
+variables:
+- group: tf-variables
+
+
+stages:
+- stage: terraform_validate_plan
+  displayName: 'Terraform Format, Validate and Plan'
+  jobs:
+  - job: Validate
+    displayName: 'Terraform : Validate'  
+    steps:
+    - checkout: self
+    - script: terraform init
+      displayName: 'Terraform : Init'
+    - script: terraform fmt
+      displayName: 'Terraform : Format'
+    - script: terraform validate
+      displayName: 'Terraform : Validate'
+  
+  - job: Plan
+    displayName: 'Terraform : Plan'
+    dependsOn: Validate
+    steps:
+    - script: |
+        terraform init
+        az login --service-principal --username $(client_id) -p $(client_secret) --tenant $(tenant_id)
+        terraform plan
+      displayName: 'Terraform : Plan'
+
+- stage: Apply
+  dependsOn: terraform_validate_plan
+  jobs:
+  - deployment: 
+    displayName: 'Provisioning Environment'
+    environment: test
+    strategy:
+      runOnce:
+        deploy:
+           steps: 
+            - script: |
+                    az login --service-principal --username $(client_id) -p $(client_secret) --tenant $(tenant_id)
+                    terraform init
+                    
+                    echo '#######Terraform Apply########'
+                    terraform apply --auto-approve
+              displayName: 'Terraform : Apply'
+   
+- stage: destroy_infrastructure
+  displayName: Destroy Infrastructure
+  jobs: 
+
+  - job: destroy
+    displayName: 'Terraform : Destroy'
+    steps:
+      - script: |
+          terraform init
+          terraform destroy --auto-approve 
